@@ -18,14 +18,7 @@ void error(char *msg) {
 }
 
 // todo:
-void setopt() {
-}
-
-int main(int argc, char**argv) {
-  const int recvfd = socket(AF_INET, SOCK_STREAM, 0);
-  if (recvfd < 0)
-    error("ERROR opening socket");
-
+void setopt(const int recvfd) {
   const int optval = 1;
   if (setsockopt(recvfd, SOL_SOCKET, SO_REUSEADDR,
                  (const void *)&optval, sizeof(int)) < 0)
@@ -38,6 +31,16 @@ int main(int argc, char**argv) {
   if (setsockopt(recvfd, SOL_SOCKET, SO_KEEPALIVE,
                  (const void*)&optval, sizeof(int)) < 0)
     error("ERROR on setting keepalive");
+}
+
+int main(int argc, char**argv) {
+  const int recvfd = socket(AF_INET, SOCK_STREAM, 0);
+  if (recvfd < 0) {
+    error("ERROR opening socket");
+  } else {
+    // printf("new socket %d\n", recvfd);
+    setopt(recvfd);
+  }
 
   // const int port = 1433;                // default port for ms sql server
   const int port = 5432;
@@ -58,8 +61,11 @@ int main(int argc, char**argv) {
   // for(;;)
   {
     const int connfd = accept(recvfd, (struct sockaddr *)&cliaddr, &clilen); // accept is blocking
-    if (connfd < 0)
+    if (connfd < 0) {
       error("ERROR on accept");
+    } else {
+      // printf("new accepted fd %d\n", connfd);
+    }
 
     struct hostent *hostp = gethostbyaddr((const char *)&cliaddr.sin_addr.s_addr,
                                           sizeof(cliaddr.sin_addr.s_addr), AF_INET);
@@ -73,8 +79,13 @@ int main(int argc, char**argv) {
 
     // open a new socket to connect ms sql server
     const int sendfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sendfd < 0) 
+    if (sendfd < 0) {
       error("ERROR opening socket");
+    } else {
+      // printf("new socket %d\n", sendfd);
+      setopt(sendfd);
+    }
+
     struct sockaddr_in sendaddr;
     bzero(&sendaddr, sizeof(sendaddr));
     sendaddr.sin_family = AF_INET;
@@ -83,29 +94,40 @@ int main(int argc, char**argv) {
     sendaddr.sin_port = htons(actport);    // port to connect actual sql server
     if (connect(sendfd, (struct sockaddr *) &sendaddr,sizeof(sendaddr)) < 0) 
       error("ERROR connecting");
+    else
+      printf("connected to backend sql server\n");
 
     char buf[1024];
-    bzero(buf, 1024);
+    bzero(buf, sizeof(buf));
 
     for (;;) {
-      int n = read(connfd, buf, 1024);
+      const int n = read(connfd, buf, sizeof(buf));
       if (n > 0) {
-        printf("server received %d bytes: %s\n", n, buf);
-        const int m = write(connfd, buf, strlen(buf));
+        printf("server received %d bytes\n", n);
+
+        // for (int i = 0; i < n; ++i) {
+        //   printf("%d", *(buf + i));
+        // }
+        // printf("\n");
+
+        const int m = write(sendfd, buf, n);
         if (m < 0)
           error("ERROR writing to socket");
+        else
+          printf("write %d bytes, total %d bytes\n", m, n);
 
-        // const int m = write(sendfd, buf, strlen(buf));
-        // if (m < 0)
-        //   error("ERROR writing to socket");
+        bzero(buf, sizeof(buf));
+        const int j = read(sendfd, buf, sizeof(buf));
+        if (j < 0)
+          error("ERROR reading from socket");
+        else
+          printf("read from backend server bytes:  %d\n", j);
 
-        // bzero(buf, 1024);
-        // const int j = read(sendfd, buf, 1024);
-        // if (j < 0)
-        //   error("ERROR reading from socket");
-        // const int k = write(connfd, buf, strlen(buf));
-        // if (k < 0)
-        //   error("ERROR writing to socket");
+        const int k = write(connfd, buf, j);
+        if (k < 0)
+          error("ERROR writing to socket");
+        else
+          printf("write back to front end bytes: %d\n", k);
 
       }
 
