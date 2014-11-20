@@ -12,6 +12,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+const int mssql_port = 1433;
+const int pg_port = 5432;
+const int mysql_port = 3306;
+
 void error(char *msg) {
   perror(msg);
   exit(1);
@@ -42,8 +46,7 @@ int main(int argc, char**argv) {
     setopt(recvfd);
   }
 
-  // const int port = 1433;                // default port for ms sql server
-  const int port = 5432;
+  const int port = pg_port;
   struct sockaddr_in servaddr;
   bzero(&servaddr, sizeof(servaddr));
   servaddr.sin_family = AF_INET;
@@ -75,7 +78,7 @@ int main(int argc, char**argv) {
     char* hostaddrp = inet_ntoa(cliaddr.sin_addr);
     if (hostaddrp == NULL)
       error("ERROR on inet_ntoa\n");
-    printf("server established connection with %s (%s)\n", hostp->h_name, hostaddrp);
+    printf("server established connection with %s (%s) from port: %d\n", hostp->h_name, hostaddrp, port);
 
     // open a new socket to connect ms sql server
     const int sendfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -95,7 +98,7 @@ int main(int argc, char**argv) {
     if (connect(sendfd, (struct sockaddr *) &sendaddr,sizeof(sendaddr)) < 0) 
       error("ERROR connecting");
     else
-      printf("connected to backend sql server\n");
+      printf("connected to backend sql server from port: %d\n", actport);
 
     char buf[1024];
     bzero(buf, sizeof(buf));
