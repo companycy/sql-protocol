@@ -12,15 +12,34 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-const int mssql_port = 1433;
-const int pg_port = 5432;
-const int mysql_port = 3306;
+// const int mssql_port = 1433;
+// const int pg_port = 5432;
+// const int mysql_port = 3306;
 
-const char mbp_ip[] = "192.168.31.202";   // host ip
-const char local_ip[] = "192.168.31.133"; // on ubuntu vm
-const char* pg_ip = local_ip;             // on ubuntu vm
-const char* mysql_ip = local_ip;          // on ubuntu vm
-const char mssql_ip[] = "192.168.31.184"; // on win7 vm
+// const char mbp_ip[] = "192.168.31.202";   // host ip
+// const char local_ip[] = "127.0.0.1";      // ubuntu vm
+// const char* pg_ip = local_ip;             // ubuntu vm
+// const char* mysql_ip = local_ip;          // ubuntu vm
+// const char mssql_ip[] = "192.168.31.184"; // win7 vm
+
+enum SqlserverType {
+  MSSQL_SERVER = 0,
+  PG_SERVER,
+  MYSQL_SERVER
+};
+
+struct ServerInfo {
+  int fe_port;
+  char* be_ip;
+  int be_port;
+};
+
+const struct ServerInfo server_infos[4] = {
+  {1433, "192.168.31.184", 1433},       // mssql
+  {5432, "127.0.0.1", 5433},            // pg
+  {3306, "127.0.0.1", 3307},            // mysql
+  {0, "", 0},
+};
 
 void error(char *msg) {
   perror(msg);
@@ -49,14 +68,16 @@ int get_sendfd(const char* sqlserver_ip, const int sqlserver_port) {
   } else if (!sqlserver_ip || *sqlserver_ip == '\0') {
     error("ERROR on sql server ip");
   } else {
-    // printf("new socket %d\n", sendfd);
+    // printf("new socket on %d, %s %d\n", sendfd, sqlserver_ip, sqlserver_port);
     setopt(sendfd);
   }
 
   struct sockaddr_in sendaddr;
   bzero(&sendaddr, sizeof(sendaddr));
   sendaddr.sin_family = AF_INET;
-  sendaddr.sin_addr.s_addr = inet_addr(sqlserver_ip);
+  // sendaddr.sin_addr.s_addr = inet_addr(sqlserver_ip);
+  // printf("local: %d, inet: %d\n", htonl(INADDR_ANY), inet_addr("127.0.0.1"));
+  sendaddr.sin_addr.s_addr = htonl(INADDR_ANY);
   sendaddr.sin_port = htons(sqlserver_port);
   if (connect(sendfd, (struct sockaddr *) &sendaddr,sizeof(sendaddr)) < 0) 
     error("ERROR connecting");
@@ -66,11 +87,52 @@ int get_sendfd(const char* sqlserver_ip, const int sqlserver_port) {
   return sendfd;
 }
 
+void get_ms_sql(const char* buf, const int len) {
+  for (int i = 0; i < len; ++i) {
+    printf("%c", *(buf + i));
+  }
+  printf("\n");
+}
+
+void get_pg_sql(const char* buf, const int len) {
+  for (int i = 0; i < len; ++i) {
+    printf("%c", *(buf + i));
+  }
+  printf("\n");
+}
+
+void get_mysql_sql(const char* buf, const int len) {
+}
+
+void get_sql(const enum SqlserverType type, const char* buf, const int len) {
+  switch (type) {
+    case MSSQL_SERVER:
+      if (buf[0] == 0x01) {             // a query packet based on tds protocol v7
+        get_ms_sql(buf + 1, len);
+      }
+      break;
+    case PG_SERVER:
+      if (buf[0] == 'P') {              // a query starting with Parse based on pg v3
+        get_pg_sql(buf + 1, len);
+      }
+      break;
+    case MYSQL_SERVER:                  // todo:
+      get_mysql_sql(buf + 1, len);
+      break;
+    default:
+      printf("ERROR on server type\n");
+      break;
+  }
+}
+
 int main(int argc, char**argv) {
   // config here
-  const int fe_port = mssql_port;  // accept connection from driver
-  const char* be_ip = mssql_ip;    // sql server ip
-  const int be_port = mssql_port;
+  const enum SqlserverType type = PG_SERVER;
+
+  const int idx = (int)type;
+  const int fe_port = server_infos[idx].fe_port; // accept connection from driver
+  const char* be_ip = server_infos[idx].be_ip;   // sql server ip
+  const int be_port = server_infos[idx].be_port;
 
   const int socketfd = socket(AF_INET, SOCK_STREAM, 0);
   if (socketfd < 0) {
@@ -123,20 +185,12 @@ int main(int argc, char**argv) {
       if (n > 0) {
         printf("from frontend:  %d bytes\n", n);
 
-        for (int i = 0; i < n; ++i) {
-          printf("%c", *(buf + i));
-        }
-        printf("\n");
+        // for (int i = 0; i < n; ++i) {
+        //   printf("%c", *(buf + i));
+        // }
+        // printf("\n");
 
-
-        if (buf[0] == 0x01) {  // from tds protocol v7, it's a query packet
-          printf("\n");
-          printf("\n");
-          // char query[1024];
-          // bzero(query, sizeof(query));
-          // strncpy(query, (const char*)(buf + 1), n - 1);
-          printf("one more packet, and first byte: %d, left bytes: %s\n", buf[0], buf + 1);
-        }
+        get_sql(type, buf, n);
 
         const int m = write(sendfd, buf, n);
         if (m < 0)
