@@ -94,8 +94,11 @@ void get_ms_sql(const char* buf, const int len) {
   printf("\n");
 }
 
-void get_pg_sql(const char* buf, const int len) {
-  for (int i = 0; i < len; ++i) {
+void get_pg_sql(const char* buf, const int len) { // based on pg v3 in void QueryExecutorImpl::sendParse()
+  for (int i = 4 + 1;                     // 4 for encodedSize, 1 for end of statement name
+       i < len && *(buf + i) != 0; ++i) { // 0 for end of query string
+    // if (*(buf + i) == 's')
+    //   printf("SSS: %d\n", i);
     printf("%c", *(buf + i));
   }
   printf("\n");
@@ -183,7 +186,7 @@ int main(int argc, char**argv) {
     for (;;) {
       const int n = read(connfd, buf, sizeof(buf));
       if (n > 0) {
-        printf("from frontend:  %d bytes\n", n);
+        printf("read from frontend:  %d bytes\n", n);
 
         // for (int i = 0; i < n; ++i) {
         //   printf("%c", *(buf + i));
