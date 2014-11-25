@@ -34,6 +34,9 @@ struct ServerInfo {
   int be_port;
 };
 
+// currently, one win7 vm with mssql, and one ubuntu vm with pg and mysql
+// proxyserver runs on same ubuntu with pg and mysql, thus, need to adjust port
+// todo: 2 ubuntu vms, one runs proxyserver, and the other runs pg and mysql
 const struct ServerInfo server_infos[4] = {
   {1433, "192.168.31.184", 1433},       // mssql
   {5432, "127.0.0.1", 5433},            // pg
@@ -75,9 +78,8 @@ int get_sendfd(const char* sqlserver_ip, const int sqlserver_port) {
   struct sockaddr_in sendaddr;
   bzero(&sendaddr, sizeof(sendaddr));
   sendaddr.sin_family = AF_INET;
-  // sendaddr.sin_addr.s_addr = inet_addr(sqlserver_ip);
-  // printf("local: %d, inet: %d\n", htonl(INADDR_ANY), inet_addr("127.0.0.1"));
-  sendaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  sendaddr.sin_addr.s_addr = inet_addr(sqlserver_ip);
+  // sendaddr.sin_addr.s_addr = htonl(INADDR_ANY);
   sendaddr.sin_port = htons(sqlserver_port);
   if (connect(sendfd, (struct sockaddr *) &sendaddr,sizeof(sendaddr)) < 0) 
     error("ERROR connecting");
@@ -87,8 +89,23 @@ int get_sendfd(const char* sqlserver_ip, const int sqlserver_port) {
   return sendfd;
 }
 
+// there can be some extra sql from jtds driver other than actual sql as below:
+// SELECT @@MAX_PRECISION
+// SET TRANSACTION ISOLATION LEVEL READ COMMITTED
+// SET IMPLICIT_TRANSACTIONS OFF
+// SET QUOTED_IDENTIFIER ON
+// SET TEXTSIZE 2147483647
 void get_ms_sql(const char* buf, const int len) {
-  for (int i = 0; i < len; ++i) {
+  // buffer[0] = pktType;
+  // buffer[1] = (byte) last; // last segment indicator
+  // buffer[2] = (byte) (bufferPtr >> 8);
+  // buffer[3] = (byte) bufferPtr;
+  // buffer[4] = 0;
+  // buffer[5] = 0;
+  // buffer[6] = (byte) ((socket.getTdsVersion() >= Driver.TDS70) ? 1 : 0);
+  // buffer[7] = 0;
+  for (int i = 7;  // based on void RequestStream::putPacket(), still need to skip 7 bytes
+       i < len; ++i) {
     printf("%c", *(buf + i));
   }
   printf("\n");
@@ -130,7 +147,7 @@ void get_sql(const enum SqlserverType type, const char* buf, const int len) {
 
 int main(int argc, char**argv) {
   // config here
-  const enum SqlserverType type = PG_SERVER;
+  const enum SqlserverType type = MSSQL_SERVER;
 
   const int idx = (int)type;
   const int fe_port = server_infos[idx].fe_port; // accept connection from driver
