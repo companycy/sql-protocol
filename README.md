@@ -8,8 +8,7 @@ sudo apt-get install -y python-software-properties
 sudo add-apt-repository ppa:boost-latest/ppa
 sudo apt-get update
 aptitude search boost
-sudo apt-get install -y libboost1.55-dev
-
+sudo apt-get install -y libboost1.55-dev libncurses5-dev bison
 
 
 
