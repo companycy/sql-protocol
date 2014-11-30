@@ -37,14 +37,14 @@ struct ServerInfo {
 // currently, one win7 vm with mssql, and one ubuntu vm with pg and mysql
 // proxyserver runs on same ubuntu with pg and mysql, thus, need to adjust port
 // todo: 2 ubuntu vms, one runs proxyserver, and the other runs pg and mysql
-const struct ServerInfo server_infos[4] = {
+const struct ServerInfo server_infos[] = {
   {1433, "192.168.31.184", 1433},       // mssql
   {5432, "127.0.0.1", 5433},            // pg
   {3306, "127.0.0.1", 3307},            // mysql
   {0, "", 0},
 };
 
-void error(char *msg) {
+void error(const char *msg) {
   perror(msg);
   exit(1);
 }
@@ -145,15 +145,7 @@ void get_sql(const enum SqlserverType type, const char* buf, const int len) {
   }
 }
 
-int main(int argc, char**argv) {
-  // config here
-  const enum SqlserverType type = MSSQL_SERVER;
-
-  const int idx = (int)type;
-  const int fe_port = server_infos[idx].fe_port; // accept connection from driver
-  const char* be_ip = server_infos[idx].be_ip;   // sql server ip
-  const int be_port = server_infos[idx].be_port;
-
+int make_socket(const int fe_port) {
   const int socketfd = socket(AF_INET, SOCK_STREAM, 0);
   if (socketfd < 0) {
     error("ERROR opening socket");
@@ -170,6 +162,19 @@ int main(int argc, char**argv) {
   if (bind(socketfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0)
     error("ERROR on binding");
 
+  return socketfd;
+}
+
+int main(int argc, char**argv) {
+  // config here
+  const enum SqlserverType type = MSSQL_SERVER;
+
+  const int idx = (int)type;
+  const int fe_port = server_infos[idx].fe_port; // accept connection from driver
+  const char* be_ip = server_infos[idx].be_ip;   // sql server ip
+  const int be_port = server_infos[idx].be_port;
+
+  const int socketfd = make_socket(fe_port);
   const int maxconn = 1024;
   if (listen(socketfd, maxconn) < 0)
     error("ERROR on listen");
